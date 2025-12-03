@@ -2,7 +2,7 @@ import time
 import sys
 import csv
 import gzip
-from typing import List, Tuple, Dict
+from typing import List, Tuple, Dict, Optional
 from Bio import SeqIO
 
 # ----- TIME ----- #
@@ -19,7 +19,7 @@ def since(t0: float) -> str:
 TRAINING_COLUMNS = [0, 1]
 TESTING_COLUMNS = [0]
 
-def load_tsv_data(filepath: str, required_indices: List[int]) -> List[Tuple[str, str]]:
+def load_tsv_data(filepath: str, required_indices: List[int]) -> List[Tuple[str, Optional[str]]]:
    """Loads required data from .tsv file. Ignores header and not needed data."""
    data = []
    try:
@@ -43,13 +43,28 @@ def load_tsv_data(filepath: str, required_indices: List[int]) -> List[Tuple[str,
 
    return data
 
-def load_fasta_gz(filepath: str):
-   pass
-   # TODO Load thingy
+def load_fasta_gz(filepath: str) -> List[str]:
+   """Loads reads from .fasta.gz file."""
+   reads = []
+   try:
+      with gzip.open(filepath, 'rt') as f:
+         for line in f:
+            line = line.strip()
+            if line and not line.startswith('>'):
+               reads.append(line.upper()) 
+   except FileNotFoundError:
+      print(f"[ERROR] File {filepath} not found.")
+      return []
+   except Exception as e:
+      print(f"[ERROR] Something went wrong when reading {filepath}: {e}")
+      return []
+      
+   return reads
 
 # ----- CODE ----- #
 
-# TODO Other thingys
+# TODO Training thingy
+# TODO Testing thingy
 
 # ----- MAIN ----- #
 
@@ -63,17 +78,28 @@ def main():
    print("Loading training metadata...")
    training_datasets = load_tsv_data(training_file, TRAINING_COLUMNS)
    print(f"Loaded {len(training_datasets)} training datasets.")
-   if training_datasets:
-      print(f"Example dataset: {training_datasets[0]}")
+
+   # TODO Training
+   for (file, loc) in training_datasets:
+      loaded_reads = load_fasta_gz(file)
+      print(f"Loaded {len(loaded_reads)} training reads.")
+      # if loaded_reads:
+         # print(f"Example read: {loaded_reads[0]}")
+      # TODO Train on reads with location
 
    print("Loading testing metadata...")
    testing_datasets = load_tsv_data(testing_file, TESTING_COLUMNS)
    print(f"Loaded {len(testing_datasets)} testing datasets.")
-   if testing_datasets:
-      print(f"Example dataset: {testing_datasets[0]}")
 
-   # TODO Main thingy
+   # TODO Testing
+   for (file, ) in testing_datasets:
+      loaded_reads = load_fasta_gz(file)
+      print(f"Loaded {len(loaded_reads)} testing reads.")
+      # if loaded_reads:
+         # print(f"Example read: {loaded_reads[0]}")
+      # TODO Test on reads
 
+   # TODO Actual writing after testing is done
    print(f"Saving output: {output_file}")
    with open(output_file, 'w', encoding='utf-8') as outfile:
       outfile.write("fasta_file\tpredicted_class\n")
