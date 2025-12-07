@@ -34,7 +34,7 @@ def load_tsv_data(filepath: str, required_indices: List[int]) -> List[Tuple[str,
 
          for row in reader:
             if row:
-               row_data = (row[index] for index in required_indices)
+               row_data = tuple(row[index] for index in required_indices)
                data.append(row_data)
 
    except FileNotFoundError:
@@ -82,7 +82,7 @@ def main():
    # TODO Training
    for (file, loc) in training_datasets:
       loaded_reads = load_fasta_gz(file)
-      print(f"Loaded {len(loaded_reads)} training reads.")
+      # print(f"Loaded {len(loaded_reads)} training reads.")
       # if loaded_reads:
          # print(f"Example read: {loaded_reads[0]}")
       # TODO Train on reads with location
@@ -94,7 +94,7 @@ def main():
    # TODO Testing
    for (file, ) in testing_datasets:
       loaded_reads = load_fasta_gz(file)
-      print(f"Loaded {len(loaded_reads)} testing reads.")
+      # print(f"Loaded {len(loaded_reads)} testing reads.")
       # if loaded_reads:
          # print(f"Example read: {loaded_reads[0]}")
       # TODO Test on reads
