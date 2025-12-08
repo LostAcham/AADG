@@ -2,8 +2,10 @@ import time
 import sys
 import csv
 import gzip
-from typing import List, Tuple, Dict, Optional
-from Bio import SeqIO
+from typing import List, Tuple, Optional
+import mmh3
+import numpy as np
+from collections import defaultdict
 
 # ----- TIME ----- #
 
@@ -63,8 +65,32 @@ def load_fasta_gz(filepath: str) -> List[str]:
 
 # ----- CODE ----- #
 
-# TODO Training thingy
-# TODO Testing thingy
+STEP = 1                         # Kmer step
+K = 4                            # Kmer length
+SEEDS = [i for i in range(200)]  # Number of hashes
+
+def generate_hashed_kmers(seq: str, seed: int) -> List[str]:
+   """Generates hashed kmers from a sequence."""
+   return set(mmh3.hash(seq[pos:pos + K], seed) for pos in range(0, len(seq) - K + 1, STEP))
+
+def generate_min_hashes(seq: str) -> List[int]:
+   """Generates set of min hashes."""
+   return [min(generate_hashed_kmers(seq, seed)) for seed in SEEDS]
+
+def calculate_centroid(signatures: List[List[int]]) -> Optional[List[int]]:
+   if not signatures:
+      return None
+   return np.min(signatures, axis=0)
+
+def minhash_similarity(sig1: List[int], sig2: List[int]) -> float:
+   """Calculates similarities between two signatures (based on minHashes)."""
+   if sig1 is None or sig2 is None:
+      return 0.0
+   equal = 0
+   for hash1, hash2 in zip(sig1, sig2):
+      if hash1 == hash2:
+         equal += 1
+   return equal / len(sig1)
 
 # ----- MAIN ----- #
 
@@ -80,31 +106,49 @@ def main():
    print(f"Loaded {len(training_datasets)} training datasets.")
 
    # TODO Training
+   sketches = defaultdict(list)
    for (file, loc) in training_datasets:
       loaded_reads = load_fasta_gz(file)
-      # print(f"Loaded {len(loaded_reads)} training reads.")
-      # if loaded_reads:
-         # print(f"Example read: {loaded_reads[0]}")
-      # TODO Train on reads with location
+      print(f"Loaded {len(loaded_reads)} training reads.")
+      for loaded_read in loaded_reads:
+         if not loaded_read:
+            continue
+         sketches[loc].append(generate_min_hashes(loaded_read))
+   
+   locations = sorted(sketches.keys())
+   centroids = defaultdict(list)
+   for loc in locations:
+      centroids[loc] = calculate_centroid(sketches[loc])
 
    print("Loading testing metadata...")
    testing_datasets = load_tsv_data(testing_file, TESTING_COLUMNS)
    print(f"Loaded {len(testing_datasets)} testing datasets.")
 
    # TODO Testing
+   results = []
    for (file, ) in testing_datasets:
       loaded_reads = load_fasta_gz(file)
-      # print(f"Loaded {len(loaded_reads)} testing reads.")
-      # if loaded_reads:
-         # print(f"Example read: {loaded_reads[0]}")
-      # TODO Test on reads
+      print(f"Loaded {len(loaded_reads)} testing reads.")
+      if not loaded_reads:
+         results.append((file, {loc: 0.0 for loc in locations}))
+         continue
+      signature = []
+      for loaded_read in loaded_reads:
+         signature.append(generate_min_hashes(loaded_read))
+      signature = list(map(min, zip(*signature)))
+      sims = [minhash_similarity(signature, centroids[loc]) for loc in locations]
+      scores = {c: p for c, p in zip(locations, sims)}
+      print(scores)
+      results.append((file, scores))
 
    # TODO Actual writing after testing is done
    print(f"Saving output: {output_file}")
    with open(output_file, 'w', encoding='utf-8') as outfile:
-      outfile.write("fasta_file\tpredicted_class\n")
-      for fasta_file in testing_datasets:
-         outfile.write(f"{fasta_file}\tPLACEHOLDER_CLASS\n")
+         header = ["fasta_file"] + locations
+         outfile.write("\t".join(header) + "\n")
+         for (f, scores) in results:
+            row = [f] + [f"{scores.get(c,0.0):.6f}" for c in locations]
+            outfile.write("\t".join(row) + "\n")
 
 if __name__ == "__main__":
    main()
