@@ -152,7 +152,7 @@ def main():
       sample_minimizers: Set[int] = set()
       for read in reads:
          if read:
-            sample_minimizers.update(minimizers_for_sequence(read, K, W))
+            sample_minimizers.update(minimizers_for_sequence(read))
       class_minimizers[loc].update(sample_minimizers)
 
    locations = sorted(class_minimizers.keys())
@@ -170,7 +170,7 @@ def main():
       for read in reads:
          if not read:
                continue
-         sample_minimizers.update(minimizers_for_sequence(read, K, W))
+         sample_minimizers.update(minimizers_for_sequence(read))
 
       scores = {}
       for loc in locations:
