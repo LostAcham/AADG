@@ -4,7 +4,7 @@ import gzip
 import mmh3
 import argparse
 from typing import List, Tuple, Optional, Set, Dict
-from collections import defaultdict, deque
+from collections import defaultdict, deque, Counter
 import time
 
 # -- PARAMETERS -- #
@@ -137,16 +137,28 @@ def main():
    training_datasets = load_tsv_data(training_file, TRAINING_COLUMNS)
    print(f"Loaded {len(training_datasets)} training datasets.")
 
-   class_minimizers: Dict[str, Set[int]] = defaultdict(set)
-
+   # Group files by class to process them together
+   files_by_class = defaultdict(list)
    for file, loc in training_datasets:
-      reads = load_fasta_gz(file)
-      print(f"Training file {file}: {len(reads)} reads.")
-      sample_minimizers: Set[int] = set()
-      for read in reads:
-         if read:
-            sample_minimizers.update(minimizers_for_sequence(read))
-      class_minimizers[loc].update(sample_minimizers)
+      files_by_class[loc].append(file)
+
+   class_minimizers: Dict[str, Set[int]] = {}
+   MIN_OCCURRENCE = 2  # Filter out minimizers that appear fewer than this many times (noise reduction)
+
+   for loc, files in files_by_class.items():
+      print(f"Processing class {loc}...")
+      loc_counter = Counter()
+      for file in files:
+         reads = load_fasta_gz(file)
+         print(f"  Training file {file}: {len(reads)} reads.")
+         for read in reads:
+            if read:
+               # Count in how many reads a minimizer appears
+               loc_counter.update(minimizers_for_sequence(read))
+      
+      # Filter singletons/errors: keep only if count >= MIN_OCCURRENCE
+      class_minimizers[loc] = {m for m, c in loc_counter.items() if c >= MIN_OCCURRENCE}
+      print(f"  Class {loc}: kept {len(class_minimizers[loc])} unique minimizers (filtered < {MIN_OCCURRENCE}).")
 
    locations = sorted(class_minimizers.keys())
    print(f"Classes found: {locations}.")
