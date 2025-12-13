@@ -10,6 +10,7 @@ import time
 # -- PARAMETERS -- #
 K = 13      # K-mer length
 W = 11      # Window size for winnowing
+MIN_OCCURRENCE = 2  # Filter out minimizers that appear fewer than this many times
 
 # ----- TIME ----- #
 
@@ -143,7 +144,6 @@ def main():
       files_by_class[loc].append(file)
 
    class_minimizers: Dict[str, Set[int]] = {}
-   MIN_OCCURRENCE = 2  # Filter out minimizers that appear fewer than this many times (noise reduction)
 
    for loc, files in files_by_class.items():
       print(f"Processing class {loc}...")
@@ -153,10 +153,8 @@ def main():
          print(f"  Training file {file}: {len(reads)} reads.")
          for read in reads:
             if read:
-               # Count in how many reads a minimizer appears
                loc_counter.update(minimizers_for_sequence(read))
-      
-      # Filter singletons/errors: keep only if count >= MIN_OCCURRENCE
+
       class_minimizers[loc] = {m for m, c in loc_counter.items() if c >= MIN_OCCURRENCE}
       print(f"  Class {loc}: kept {len(class_minimizers[loc])} unique minimizers (filtered < {MIN_OCCURRENCE}).")
 
@@ -171,11 +169,12 @@ def main():
    for (file,) in testing_datasets:
       reads = load_fasta_gz(file)
       print(f"Testing file {file}: {len(reads)} reads.")
-      sample_minimizers: Set[int] = set()
+      sample_counter = Counter()
       for read in reads:
          if not read:
-               continue
-         sample_minimizers.update(minimizers_for_sequence(read))
+            continue
+         sample_counter.update(minimizers_for_sequence(read)) #!
+      sample_minimizers = {m for m, c in sample_counter.items() if c >= MIN_OCCURRENCE}
 
       scores = {}
       for loc in locations:
