@@ -9,7 +9,7 @@ import time
 
 # -- PARAMETERS -- #
 K = 13      # K-mer length
-W = 26      # Window size for winnowing
+W = 11      # Window size for winnowing
 
 # ----- TIME ----- #
 
@@ -75,10 +75,6 @@ def hash_kmer(kmer: str) -> int:
    lo, hi = mmh3.hash64(kmer, signed=True)
    return to_uint64(to_uint64(lo) ^ ((to_uint64(hi) << 1) & UINT64_MASK))
 
-def canonicalize(kmer: str) -> str:
-   complement = {'A': 'T', 'C': 'G', 'G': 'C', 'T': 'A'}
-   return "".join(complement.get(base, base) for base in reversed(kmer))
-
 def minimizers_for_sequence(seq: str) -> Set[int]:
    """
    Compute minimizer set for a single sequence using the winnowing scheme.
@@ -94,7 +90,7 @@ def minimizers_for_sequence(seq: str) -> Set[int]:
    kmer_hashes = []
    for i in range(nr_of_kmers):
       kmer = seq[i:i+K]
-      kmer_hashes.append(hash_kmer(canonicalize(kmer)))
+      kmer_hashes.append(hash_kmer(kmer))
 
    # Window is larger than number of k-mers.
    if W > nr_of_kmers:
@@ -128,8 +124,6 @@ def jaccard_similarity(set_a: Set[int], set_b: Set[int]) -> float:
       return 0.0
    inter = len(set_a & set_b)
    union = len(set_a | set_b)
-   if union == 0:
-      return 0.0
    return inter / union
 
 # ----- MAIN ----- #
