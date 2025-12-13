@@ -123,8 +123,7 @@ def jaccard_similarity(set_a: Set[int], set_b: Set[int]) -> float:
    if not set_a or not set_b:
       return 0.0
    inter = len(set_a & set_b)
-   union = len(set_a | set_b)
-   return inter / union
+   return 0.5 * (inter / len(set_a) + inter / len(set_b))
 
 # ----- MAIN ----- #
 def main():
