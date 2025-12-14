@@ -13,7 +13,6 @@ from array import array
 
 K = 13      # K-mer length
 W = 11      # Window size for winnowing
-MIN_OCCURRENCE = 2  # Filter out minimizers that appear fewer than this many times
 
 # ----- TIME ----- #
 
@@ -158,14 +157,18 @@ def main():
             if read:
                loc_counter.update(minimizers_for_sequence(read))
 
+      min_count = (loc_counter.total() ** 0.5) // 170
+
       # Memory Optimization: Extract to list, delete Counter, sort in-place, store as compact array
-      valid_minimizers = [m for m, c in loc_counter.items() if c >= MIN_OCCURRENCE]
+      valid_minimizers = [m for m, c in loc_counter.items() if c >= min_count]
       del loc_counter
       valid_minimizers.sort()
       class_minimizers[loc] = array('Q', valid_minimizers)
       del valid_minimizers
       #? gc.collect()
-      print(f"Class {loc}: kept {len(class_minimizers[loc])} unique minimizers (filtered < {MIN_OCCURRENCE}).")
+      print(f"Class {loc}: kept {len(class_minimizers[loc])} unique minimizers (filtered < {min_count}).")
+
+   del files_by_class
 
    locations = sorted(class_minimizers.keys())
    print(f"Classes found: {locations}.")
