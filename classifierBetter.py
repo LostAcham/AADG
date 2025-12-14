@@ -2,6 +2,7 @@ import sys
 import csv
 import gzip
 import mmh3
+import math
 import argparse
 from typing import List, Tuple, Optional, Set, Dict, Generator
 from collections import defaultdict, deque, Counter
@@ -12,7 +13,7 @@ from array import array
 # -- PARAMETERS -- #
 
 K = 13      # K-mer length
-W = 11      # Window size for winnowing
+W = 26      # Window size for winnowing
 
 # ----- TIME ----- #
 
@@ -147,17 +148,24 @@ def main():
 
    class_minimizers: Dict[str, array] = {}
 
+   maxi = 0
    for loc, files in files_by_class.items():
       print(f"Processing class {loc}...")
       loc_counter = Counter()
       for file in files:
+         counter = 0
          reads = load_fasta_gz(file)
          print(f" Training file {file}...")
          for read in reads:
             if read:
                loc_counter.update(minimizers_for_sequence(read))
+               counter += 1
+         maxi = max(maxi, counter)
+         
 
-      min_count = (loc_counter.total() ** 0.5) // 170
+      # min_count = (loc_counter.total() ** 0.5) // 75
+      min_count = 2 ** math.log10(maxi // 1000)
+      # min_count = 2
 
       # Memory Optimization: Extract to list, delete Counter, sort in-place, store as compact array
       valid_minimizers = [m for m, c in loc_counter.items() if c >= min_count]
