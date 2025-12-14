@@ -3,25 +3,14 @@ import csv
 import gzip
 import mmh3
 import math
-import argparse
-from typing import List, Tuple, Optional, Set, Dict, Generator
-from collections import defaultdict, deque, Counter
-import time
 from array import array
-#? import gc
+from collections import defaultdict, deque, Counter
+from typing import List, Tuple, Optional, Set, Dict, Generator
 
 # -- PARAMETERS -- #
 
 K = 13      # K-mer length
 W = 26      # Window size for winnowing
-
-# ----- TIME ----- #
-
-def now() -> float:
-   return time.time()
-
-def since(t0: float) -> str:
-   return "%.4f" % (time.time() - t0)
 
 # ----- FILE ----- #
 
@@ -76,40 +65,37 @@ def hash_kmer(kmer: str) -> int:
    lo, hi = mmh3.hash64(kmer, signed=True)
    return to_uint64(to_uint64(lo) ^ ((to_uint64(hi) << 1) & UINT64_MASK))
 
-def minimizers_for_sequence(seq: str) -> Set[int]:
-   """
-   Compute minimizer set for a single sequence using the winnowing scheme.
-   Returns a set of 64-bit integer hashes (minimizers).
-   """
+def get_minimizers(seq: str) -> Set[int]:
+   """Compute minimizer set for a single sequence using the winnowing scheme."""
 
-   #! Checking if creating k-mer isn't possible.
+   # Check if creating k-mer is impossible.
    if len(seq) < K:
       return set()
 
-   # Create list of hashed canonicalized kmers.
-   nr_of_kmers = len(seq) - K + 1
+   # Create list of hashed kmers.
+   n_kmers = len(seq) - K + 1
    kmer_hashes = []
-   for i in range(nr_of_kmers):
+   for i in range(n_kmers):
       kmer = seq[i:i+K]
       kmer_hashes.append(hash_kmer(kmer))
 
-   # Window is larger than number of k-mers.
-   if W > nr_of_kmers:
-      return set(min(kmer_hashes))
+   # Check if window is larger than number of k-mers.
+   if W > n_kmers:
+      return {min(kmer_hashes)}
 
-   # Use set to store min_hashes and deque to store indexes of hashed kmers.
-   minimizers = set()
-   dq = deque()
+   minimizers = set()   # Minimal hashes
+   dq = deque()         # Indices of hashed kmers
 
-   for i in range(nr_of_kmers):
-      # Remove all kmer hashes that are larger than current one.
+   # Winnowing scheme:
+   for i in range(n_kmers):
+      # Remove all hashes that are larger than current one.
       while dq and kmer_hashes[i] < kmer_hashes[dq[-1]]:
          dq.pop()
 
       # Add current index to the last position.
       dq.append(i)
 
-      # Remove all indexes outside the window.
+      # Remove all indices outside the window.
       while dq and dq[0] <= i - W:
          dq.popleft()
 
@@ -121,10 +107,9 @@ def minimizers_for_sequence(seq: str) -> Set[int]:
    return minimizers
 
 def calculate_score(sample_set: Set[int], class_array: array) -> float:
+   """Calculates the similarity score between a query sample and a known class."""
    if not sample_set or not class_array:
       return 0.0
-   
-   # Efficient intersection: iterate over the compact array, check existence in the set (O(1))
    inter = sum(1 for m in class_array if m in sample_set)
    return 0.5 * (inter / len(sample_set) + inter / len(class_array))
 
@@ -141,63 +126,68 @@ def main():
    training_datasets = load_tsv_data(training_file, TRAINING_COLUMNS)
    print(f"Loaded {len(training_datasets)} training datasets.")
 
-   # Group files by class to process them together
+   # Group files by class to process them together.
    files_by_class = defaultdict(list)
    for file, loc in training_datasets:
       files_by_class[loc].append(file)
+   del training_datasets
 
    class_minimizers: Dict[str, array] = {}
 
-   max_read_length = 0
+   # Build Class Sketches - Training Phase
+   max_n_reads = 0 #? Move to loop
    for loc, files in files_by_class.items():
-      print(f"Processing class {loc}...")
+      print(f"Processing class {loc}...") #!
       loc_counter = Counter()
+
+      # Process all files belonging to this class
       for file in files:
-         read_length = 0
+         n_reads = 0
          reads = load_fasta_gz(file)
-         print(f" Training file {file}...")
+         print(f"Training file {file}...") #!
          for read in reads:
             if read:
-               loc_counter.update(minimizers_for_sequence(read))
-               read_length += 1
-         max_read_length = max(max_read_length, read_length)
-         
+               loc_counter.update(get_minimizers(read))
+               n_reads += 1
+         max_n_reads = max(max_n_reads, n_reads)
 
-      minimizer_limit = 2 ** math.log10(max_read_length // 1000)
+      # Noise filtering, calculate threshold based on read amount
+      minimizer_limit = 2 ** math.log10(max(1, max_n_reads // 1000))
       valid_minimizers = [m for m, c in loc_counter.items() if c >= minimizer_limit]
       del loc_counter
-      valid_minimizers.sort()
-      class_minimizers[loc] = array('Q', valid_minimizers)
-      del valid_minimizers
-      #? gc.collect()
-      print(f"Class {loc}: kept {len(class_minimizers[loc])} unique minimizers (filtered < {minimizer_limit}).")
 
+      valid_minimizers.sort()
+      class_minimizers[loc] = array('Q', valid_minimizers) # Compact array
+      del valid_minimizers
+      print(f"Class {loc}: kept {len(class_minimizers[loc])} unique minimizers, limit = {minimizer_limit}.") #!
    del files_by_class
 
    locations = sorted(class_minimizers.keys())
-   print(f"Classes found: {locations}.")
+   print(f"Classes found: {locations}.") #!
 
    print("Loading testing metadata...")
    testing_datasets = load_tsv_data(testing_file, TESTING_COLUMNS)
    print(f"Loaded {len(testing_datasets)} testing datasets.")
 
+   # Classify Test Samples - Testing Phase
    results = []
-   for (file,) in testing_datasets:
+   for (file, ) in testing_datasets:
       reads = load_fasta_gz(file)
-      print(f" Testing file {file}...")
+      print(f"Testing file {file}...") #!
+
+      # Extract minimizers from test sample
       sample_minimizers: Set[int] = set()
       for read in reads:
-         if not read:
-            continue
-         sample_minimizers.update(minimizers_for_sequence(read))
+         if read:
+            sample_minimizers.update(get_minimizers(read))
 
+      # Calculate similarity scores against all trained classes
       scores = {}
       for loc in locations:
          scores[loc] = calculate_score(sample_minimizers, class_minimizers[loc])
-      print(f"Scores for {file}: {scores}.")
+      print(f"Scores for {file}: {scores}.") #!
       results.append((file, scores))
 
-   # Write results to output file.
    with open(output_file, 'w', encoding='utf-8') as out:
       header = ["fasta_file"] + locations
       out.write("\t".join(header) + "\n")
