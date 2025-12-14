@@ -148,33 +148,29 @@ def main():
 
    class_minimizers: Dict[str, array] = {}
 
-   maxi = 0
+   max_read_length = 0
    for loc, files in files_by_class.items():
       print(f"Processing class {loc}...")
       loc_counter = Counter()
       for file in files:
-         counter = 0
+         read_length = 0
          reads = load_fasta_gz(file)
          print(f" Training file {file}...")
          for read in reads:
             if read:
                loc_counter.update(minimizers_for_sequence(read))
-               counter += 1
-         maxi = max(maxi, counter)
+               read_length += 1
+         max_read_length = max(max_read_length, read_length)
          
 
-      # min_count = (loc_counter.total() ** 0.5) // 75
-      min_count = 2 ** math.log10(maxi // 1000)
-      # min_count = 2
-
-      # Memory Optimization: Extract to list, delete Counter, sort in-place, store as compact array
-      valid_minimizers = [m for m, c in loc_counter.items() if c >= min_count]
+      minimizer_limit = 2 ** math.log10(max_read_length // 1000)
+      valid_minimizers = [m for m, c in loc_counter.items() if c >= minimizer_limit]
       del loc_counter
       valid_minimizers.sort()
       class_minimizers[loc] = array('Q', valid_minimizers)
       del valid_minimizers
       #? gc.collect()
-      print(f"Class {loc}: kept {len(class_minimizers[loc])} unique minimizers (filtered < {min_count}).")
+      print(f"Class {loc}: kept {len(class_minimizers[loc])} unique minimizers (filtered < {minimizer_limit}).")
 
    del files_by_class
 
