@@ -1,6 +1,0 @@
-# Ignore stealing code from previous exercise
-mapper.py
-
-# Ignore any generated (output) .tsv files
-# Add/edit rule if new train/test data appear
-*.tsv
